@@ -15,10 +15,17 @@ export function NightPhase({ state, playerId, myRole }: Props) {
   const [submitted, setSubmitted] = useState(false);
   const socket = getSocket();
   const investigation = useGameStore((s) => s.detectiveInvestigation);
+  const mafiaPartners = useGameStore((s) => s.mafiaPartners);
+  const mafiaChatMessages = useGameStore((s) => s.mafiaChatMessages);
 
   const me = state.players.find((p) => p.id === playerId);
   const canAct = me?.status === 'alive' && myRole && myRole !== 'civilian';
-  const targets = state.players.filter((p) => p.status === 'alive' && p.id !== playerId);
+  const targets = state.players.filter((p) => {
+    if (p.status !== 'alive' || p.id === playerId) return false;
+    // Mafia cannot target their own partners
+    if (myRole === 'mafia' && mafiaPartners.includes(p.username)) return false;
+    return true;
+  });
   const isMafia = myRole === 'mafia';
 
   const submit = () => {
@@ -77,10 +84,7 @@ export function NightPhase({ state, playerId, myRole }: Props) {
           </button>
 
           {isMafia && (
-            <MafiaChat 
-              messages={state.mafiaChatMessages ?? []} 
-              myUsername={me?.username ?? ''} 
-            />
+            <MafiaChat messages={mafiaChatMessages} myUsername={me?.username ?? ''} />
           )}
 
           {myRole === 'detective' && submitted && investigation && (
