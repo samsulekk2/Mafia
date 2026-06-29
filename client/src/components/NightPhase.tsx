@@ -2,23 +2,24 @@ import { useState } from 'react';
 import { getSocket } from '../lib/socket';
 import { useGameStore } from '../store/gameStore';
 import type { GameStatePublic, Role } from '@shared/types';
+import { MafiaChat } from './MafiaChat';
 
 interface Props {
   state: GameStatePublic;
   playerId: string;
   myRole: Role | null;
-  isSpectator: boolean;
 }
 
-export function NightPhase({ state, playerId, myRole, isSpectator }: Props) {
+export function NightPhase({ state, playerId, myRole }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const socket = getSocket();
   const investigation = useGameStore((s) => s.detectiveInvestigation);
 
   const me = state.players.find((p) => p.id === playerId);
-  const canAct = !isSpectator && me?.status === 'alive' && myRole && myRole !== 'civilian';
-  const targets = state.players.filter((p) => !p.isSpectator && p.status === 'alive' && p.id !== playerId);
+  const canAct = me?.status === 'alive' && myRole && myRole !== 'civilian';
+  const targets = state.players.filter((p) => p.status === 'alive' && p.id !== playerId);
+  const isMafia = myRole === 'mafia';
 
   const submit = () => {
     if (!selected || !myRole) return;
@@ -37,13 +38,11 @@ export function NightPhase({ state, playerId, myRole, isSpectator }: Props) {
     <div className="max-w-lg mx-auto p-4 space-y-6">
       <header className="text-center">
         <h2 className="font-display text-3xl text-indigo-400">Night {state.round}</h2>
-        <p className="text-mafia-muted text-sm mt-2">The city sleeps…</p>
+        <p className="dark:text-mafia-muted text-gray-600 text-sm mt-2">The city sleeps…</p>
       </header>
 
-      {isSpectator && <p className="text-center text-mafia-muted">Spectating — night actions hidden</p>}
-
-      {!canAct && !isSpectator && (
-        <p className="text-center text-mafia-muted">
+      {!canAct && (
+        <p className="text-center dark:text-mafia-muted text-gray-600">
           {me?.status === 'dead' ? 'You are dead. You cannot act.' : 'Waiting for night to end…'}
         </p>
       )}
@@ -72,10 +71,17 @@ export function NightPhase({ state, playerId, myRole, isSpectator }: Props) {
           <button
             disabled={!selected || submitted}
             onClick={submit}
-            className="w-full py-3 rounded-xl bg-mafia-accent hover:bg-red-700 disabled:opacity-40 font-medium"
+            className="w-full py-3 rounded-xl bg-mafia-accent hover:bg-red-700 disabled:opacity-40 font-medium text-white"
           >
             {submitted ? 'Action submitted' : 'Confirm action'}
           </button>
+
+          {isMafia && (
+            <MafiaChat 
+              messages={state.mafiaChatMessages ?? []} 
+              myUsername={me?.username ?? ''} 
+            />
+          )}
 
           {myRole === 'detective' && submitted && investigation && (
             <div className="p-4 rounded-xl bg-blue-900/30 border border-blue-500/40 text-center">
