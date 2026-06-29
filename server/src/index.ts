@@ -91,6 +91,14 @@ function sendPrivateState(room: GameEngine, socketId: string, playerId: string) 
   if (assignment) {
     io.to(socketId).emit('roles_assigned', assignment);
   }
+  // Deliver mafia chat history to reconnecting mafia players
+  const player = room.getPlayerById(playerId);
+  if (player?.role === 'mafia') {
+    const messages = room.getMafiaChatMessages();
+    if (messages.length > 0) {
+      io.to(socketId).emit('mafia_chat_update', messages);
+    }
+  }
   const full = room.dayResult;
   if (full && full.detectiveResult !== 'none') {
     const player = room.getPlayerById(playerId);
@@ -220,12 +228,12 @@ io.on('connection', (socket) => {
     data.username = joinUsername;
 
     socket.join(roomId);
-    
+
     // Broadcast to all clients in the room after socket has joined
     process.nextTick(() => {
       io.to(roomId).emit('game_state', room.getPublicState());
     });
-    
+
     ack?.({
       ok: true,
       playerId: player.id,
@@ -396,7 +404,13 @@ io.on('connection', (socket) => {
       return;
     }
     const ok = room.submitMafiaChatMessage(data.playerId, parsed.data.message);
-    if (ok) broadcastState(room);
+    if (ok) {
+      // Privacy: only send mafia chat to mafia players, not to all clients
+      const messages = room.getMafiaChatMessages();
+      for (const p of room.getMafiaPlayers()) {
+        io.to(p.socketId).emit('mafia_chat_update', messages);
+      }
+    }
     ack?.({ ok });
   });
 
