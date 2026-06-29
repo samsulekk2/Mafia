@@ -9,7 +9,7 @@ export function useVoiceChat() {
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
 
-  const active = voiceEnabled && (phase === 'LOBBY' || phase === 'ENDED');
+  const active = voiceEnabled && (phase === 'LOBBY' || phase === 'DAY' || phase === 'ENDED');
 
   useEffect(() => {
     if (!active) {
