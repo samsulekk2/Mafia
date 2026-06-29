@@ -4,6 +4,7 @@ import type {
   DayResultPublic,
   DetectiveInvestigationResult,
   GameStatePublic,
+  MafiaChatMessage,
   Role,
   RoleAssignmentPayload,
   TimerSync,
@@ -14,7 +15,6 @@ interface GameStore {
   username: string | null;
   playerId: string | null;
   isAdmin: boolean;
-  isSpectator: boolean;
   connected: boolean;
   reconnecting: boolean;
   error: string | null;
@@ -28,11 +28,11 @@ interface GameStore {
   gameWinner: 'mafia' | 'civilians' | null;
   detectiveInvestigation: DetectiveInvestigationResult | null;
   detectiveDayReveal: Pick<DayResult, 'detectiveResult' | 'detectiveTargetName'> | null;
+  mafiaChatMessages: MafiaChatMessage[];
 
   setUsername: (username: string | null) => void;
   setPlayerId: (id: string | null) => void;
   setIsAdmin: (v: boolean) => void;
-  setIsSpectator: (v: boolean) => void;
   setConnected: (v: boolean) => void;
   setReconnecting: (v: boolean) => void;
   setError: (error: string | null) => void;
@@ -46,6 +46,7 @@ interface GameStore {
   setDetectiveDayReveal: (
     result: Pick<DayResult, 'detectiveResult' | 'detectiveTargetName'> | null
   ) => void;
+  setMafiaChatMessages: (messages: MafiaChatMessage[]) => void;
   reset: () => void;
 }
 
@@ -53,7 +54,6 @@ const initialState = {
   username: null as string | null,
   playerId: null as string | null,
   isAdmin: false,
-  isSpectator: false,
   connected: false,
   reconnecting: false,
   error: null as string | null,
@@ -66,6 +66,7 @@ const initialState = {
   gameWinner: null as 'mafia' | 'civilians' | null,
   detectiveInvestigation: null as DetectiveInvestigationResult | null,
   detectiveDayReveal: null as Pick<DayResult, 'detectiveResult' | 'detectiveTargetName'> | null,
+  mafiaChatMessages: [] as MafiaChatMessage[],
 };
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -73,7 +74,6 @@ export const useGameStore = create<GameStore>((set) => ({
   setUsername: (username) => set({ username }),
   setPlayerId: (playerId) => set({ playerId }),
   setIsAdmin: (isAdmin) => set({ isAdmin }),
-  setIsSpectator: (isSpectator) => set({ isSpectator }),
   setConnected: (connected) => set({ connected }),
   setReconnecting: (reconnecting) => set({ reconnecting }),
   setError: (error) => set({ error }),
@@ -89,5 +89,6 @@ export const useGameStore = create<GameStore>((set) => ({
   setGameWinner: (gameWinner) => set({ gameWinner }),
   setDetectiveInvestigation: (detectiveInvestigation) => set({ detectiveInvestigation }),
   setDetectiveDayReveal: (detectiveDayReveal) => set({ detectiveDayReveal }),
+  setMafiaChatMessages: (mafiaChatMessages) => set({ mafiaChatMessages }),
   reset: () => set({ ...initialState }),
 }));
