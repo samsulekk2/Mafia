@@ -2,14 +2,12 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { z } from 'zod';
 import { getOrCreateRoom } from './RoomManager.js';
 import { GameEngine, isAllowedUser } from './GameEngine.js';
 import { verifyPassword, getCredentials } from './auth.js';
 import { ADMIN_USERNAME } from '../../shared/types.js';
 
-dotenv.config();
 getCredentials(); // fail fast if USER_CREDENTIALS is missing or invalid
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -399,6 +397,17 @@ io.on('connection', (socket) => {
       }
     }
     ack?.({ ok });
+  });
+
+  socket.on('toggle_skip_discussion', (ack) => {
+    const room = data.roomId ? getOrCreateRoom(data.roomId) : null;
+    if (!room || !data.playerId) {
+      ack?.({ ok: false, error: 'Not in room' });
+      return;
+    }
+    const ok = room.toggleSkipDiscussionVote(data.playerId);
+    ack?.({ ok });
+    broadcastState(room);
   });
 
   socket.on('vote_player', (payload, ack) => {
