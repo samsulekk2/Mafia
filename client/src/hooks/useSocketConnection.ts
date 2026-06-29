@@ -28,10 +28,13 @@ export function useSocketConnection() {
         store().setUsername(session.username);
         store().setPlayerId(res.playerId!);
         store().setIsAdmin(Boolean(res.isAdmin));
-        store().setIsSpectator(session.isSpectator);
         store().setGameState(res.state!);
         if (res.timer) store().setTimer(res.timer);
         if (res.winner) store().setGameWinner(res.winner);
+        // Sync lastDayResult so DAY phase renders correctly after reconnect
+        if (res.state?.phase === 'DAY' && res.state.dayResult) {
+          store().setLastDayResult(res.state.dayResult);
+        }
       });
     }
 
@@ -55,12 +58,21 @@ export function useSocketConnection() {
       attemptReconnect();
     });
 
-    socket.on('game_state', (state) => store().setGameState(state));
+    socket.on('game_state', (state) => {
+      store().setGameState(state);
+      // Sync derived state so reconnect during DAY phase works
+      if (state.phase === 'DAY' && state.dayResult) {
+        store().setLastDayResult(state.dayResult);
+      }
+    });
 
     socket.on('roles_assigned', (payload) => store().setRoleAssignment(payload));
 
     socket.on('night_start', ({ timer }) => {
       store().setTimer(timer);
+      store().setLastVotingResult(null);
+      store().setLastDayResult(null);
+      store().setMafiaChatMessages([]);
       store().setDetectiveInvestigation(null);
       store().setDetectiveDayReveal(null);
     });
@@ -81,6 +93,7 @@ export function useSocketConnection() {
     socket.on('voting_start', ({ timer }) => store().setTimer(timer));
 
     socket.on('voting_result', (result) => store().setLastVotingResult(result));
+    socket.on('mafia_chat_update', (messages) => store().setMafiaChatMessages(messages));
 
     socket.on('game_end', ({ winner }) => store().setGameWinner(winner));
 
@@ -101,7 +114,6 @@ export function useSocketConnection() {
       store().setUsername(session.username);
       store().setPlayerId(session.playerId);
       store().setIsAdmin(session.isAdmin);
-      store().setIsSpectator(session.isSpectator);
       if (socket.connected) attemptReconnect();
     }
 
@@ -117,6 +129,7 @@ export function useSocketConnection() {
       socket.off('detective_day_reveal');
       socket.off('voting_start');
       socket.off('voting_result');
+      socket.off('mafia_chat_update');
       socket.off('game_end');
       socket.off('voice_chat_status');
       socket.off('kicked');
@@ -132,7 +145,6 @@ export function persistSession(): void {
     playerId: s.playerId,
     roomId: s.gameState.roomId,
     isAdmin: s.isAdmin,
-    isSpectator: s.isSpectator,
   });
 }
 
