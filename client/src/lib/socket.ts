@@ -56,6 +56,7 @@ interface ClientToServerEvents {
   role_action_mafia: (payload: { targetId: string }, ack?: (res: { ok: boolean }) => void) => void;
   role_action_doctor: (payload: { targetId: string }, ack?: (res: { ok: boolean }) => void) => void;
   role_action_detective: (payload: { targetId: string }, ack?: (res: { ok: boolean }) => void) => void;
+  mafia_chat_message: (payload: { message: string }, ack?: (res: { ok: boolean }) => void) => void;
   toggle_skip_discussion: (ack?: (res: { ok: boolean }) => void) => void;
   vote_player: (payload: { targetId: string }, ack?: (res: { ok: boolean }) => void) => void;
   request_timer_sync: (
