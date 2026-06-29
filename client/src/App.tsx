@@ -13,19 +13,20 @@ import { NightPhase } from './components/NightPhase';
 import { DayPhase } from './components/DayPhase';
 import { VotingPhase } from './components/VotingPhase';
 import { GameEndScreen } from './components/GameEndScreen';
-import { TimerDisplay } from './components/TimerDisplay';
+import { CircularTimer } from './components/CircularTimer';
 import { getRoomIdFromUrl } from './lib/room';
 import { logout } from './lib/logout';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 
-export default function App() {
+function AppContent() {
   const [loading, setLoading] = useState(false);
   const [showRole, setShowRole] = useState(false);
   const roomId = getRoomIdFromUrl();
+  const { theme, toggleTheme } = useTheme();
 
   const username = useGameStore((s) => s.username);
   const playerId = useGameStore((s) => s.playerId);
   const isAdmin = useGameStore((s) => s.isAdmin);
-  const isSpectator = useGameStore((s) => s.isSpectator);
   const connected = useGameStore((s) => s.connected);
   const reconnecting = useGameStore((s) => s.reconnecting);
   const error = useGameStore((s) => s.error);
@@ -36,6 +37,15 @@ export default function App() {
   const lastDayResult = useGameStore((s) => s.lastDayResult);
   const lastVotingResult = useGameStore((s) => s.lastVotingResult);
   const gameWinner = useGameStore((s) => s.gameWinner);
+
+  const getTotalSeconds = (phase: string): number => {
+    switch (phase) {
+      case 'night': return 60;
+      case 'day': return 240;
+      case 'voting': return 240;
+      default: return 60;
+    }
+  };
 
   useSocketConnection();
   useTimerSync();
@@ -90,40 +100,9 @@ export default function App() {
           playerId: joinRes.playerId!,
           roomId: joinRes.roomId ?? roomId,
           isAdmin: Boolean(loginRes.isAdmin),
-          isSpectator: false,
         });
       });
     });
-  };
-
-  const handleSpectator = () => {
-    setLoading(true);
-    useGameStore.getState().setError(null);
-    connectSocket();
-    const socket = getSocket();
-
-    socket.emit(
-      'join_room',
-      { asSpectator: true, displayName: `Spectator-${Date.now() % 10000}`, roomId },
-      (joinRes) => {
-        setLoading(false);
-        if (!joinRes?.ok) {
-          useGameStore.getState().setError(joinRes?.error ?? 'Join failed');
-          return;
-        }
-        useGameStore.getState().setUsername('Spectator');
-        useGameStore.getState().setIsSpectator(true);
-        useGameStore.getState().setPlayerId(joinRes.playerId!);
-        useGameStore.getState().setGameState(joinRes.state!);
-        saveSession({
-          username: 'Spectator',
-          playerId: joinRes.playerId!,
-          roomId: joinRes.roomId ?? roomId,
-          isAdmin: false,
-          isSpectator: true,
-        });
-      }
-    );
   };
 
   useEffect(() => {
@@ -134,7 +113,6 @@ export default function App() {
     return (
       <LoginPage
         onLogin={handleLogin}
-        onSpectator={handleSpectator}
         loading={loading}
         error={error}
         roomId={roomId}
@@ -145,9 +123,9 @@ export default function App() {
   const phase = gameState?.phase ?? 'LOBBY';
 
   return (
-    <div className="min-h-screen pb-8">
-      <div className="sticky top-0 z-10 bg-mafia-bg/90 backdrop-blur border-b border-white/5 px-4 py-2 flex justify-between items-center text-sm">
-        <span className="text-mafia-muted">
+    <div className="min-h-screen pb-8 dark:bg-mafia-bg bg-mafia-bg-light dark:text-white text-gray-900">
+      <div className="sticky top-0 z-10 dark:bg-mafia-bg/90 bg-white/90 backdrop-blur border-b dark:border-white/5 border-gray-200 px-4 py-2 flex justify-between items-center text-sm">
+        <span className="dark:text-mafia-muted text-gray-600">
           {connected ? '🟢' : reconnecting ? '🟡' : '🔴'} {username}
           {isAdmin && ' · Admin'}
           {reconnecting && !connected && (
@@ -156,12 +134,24 @@ export default function App() {
         </span>
         <div className="flex items-center gap-3">
           {timer && phase !== 'LOBBY' && phase !== 'ENDED' && (
-            <TimerDisplay seconds={timer.remainingSeconds} phase={timer.phase} />
+            <CircularTimer 
+              seconds={timer.remainingSeconds} 
+              totalSeconds={getTotalSeconds(timer.phase)} 
+              phase={timer.phase} 
+            />
           )}
           <button
             type="button"
+            onClick={toggleTheme}
+            className="dark:text-mafia-muted text-gray-600 dark:hover:text-white hover:text-gray-900 text-xs px-2 py-1 rounded dark:border-white/10 border-gray-300 dark:hover:border-white/20 hover:border-gray-400 transition-colors"
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <button
+            type="button"
             onClick={() => logout()}
-            className="text-mafia-muted hover:text-white text-xs px-2 py-1 rounded border border-white/10 hover:border-white/20 transition-colors"
+            className="dark:text-mafia-muted text-gray-600 dark:hover:text-white hover:text-gray-900 text-xs px-2 py-1 rounded dark:border-white/10 border-gray-300 dark:hover:border-white/20 hover:border-gray-400 transition-colors"
           >
             Log out
           </button>
@@ -183,7 +173,6 @@ export default function App() {
                 state={gameState}
                 playerId={playerId}
                 isAdmin={isAdmin}
-                isSpectator={isSpectator}
               />
             </>
           )}
@@ -195,7 +184,6 @@ export default function App() {
               state={gameState}
               playerId={playerId}
               myRole={myRole}
-              isSpectator={isSpectator}
             />
           )}
 
@@ -207,12 +195,19 @@ export default function App() {
             <VotingPhase
               state={gameState}
               playerId={playerId}
-              isSpectator={isSpectator}
               lastResult={lastVotingResult}
             />
           )}
         </motion.div>
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
   );
 }
