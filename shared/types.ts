@@ -36,7 +36,6 @@ export interface GameConfig {
   dayTime: number;
   votingTime: number;
   voiceChatEnabled: boolean;
-  allowSpectators: boolean;
   revealRolesOnDeath: boolean;
 }
 
@@ -47,7 +46,6 @@ export interface Player {
   status: PlayerStatus;
   role?: Role;
   ready: boolean;
-  isSpectator: boolean;
   disconnected: boolean;
 }
 
@@ -90,7 +88,6 @@ export interface GameStatePublic {
     username: string;
     status: PlayerStatus;
     ready: boolean;
-    isSpectator: boolean;
   }>;
   roleConfig: RoleConfig;
   voiceChatEnabled: boolean;
@@ -101,6 +98,9 @@ export interface GameStatePublic {
   winner: 'mafia' | 'civilians' | null;
   round: number;
   skipDiscussionVotes: string[];
+  votedPlayerIds: string[];
+  revealedRoles: Array<{ username: string; role: Role }> | null;
+  mafiaChatMessages: MafiaChatMessage[];
 }
 
 export interface RoleAssignmentPayload {
@@ -112,4 +112,12 @@ export interface TimerSync {
   phase: 'night' | 'day' | 'voting';
   endsAt: number;
   remainingSeconds: number;
+}
+
+export interface MafiaChatMessage {
+  id: string;
+  senderId: string;
+  senderUsername: string;
+  message: string;
+  timestamp: number;
 }
