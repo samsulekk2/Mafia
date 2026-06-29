@@ -78,6 +78,7 @@ const targetSchema = z.object({ targetId: z.string().uuid() });
 const voteSchema = z.object({ targetId: z.string().uuid() });
 const kickSchema = z.object({ playerId: z.string().uuid() });
 const voiceSchema = z.object({ enabled: z.boolean() });
+const messageSchema = z.object({ message: z.string().min(1).max(500) });
 
 const reconnectSchema = z.object({
   playerId: z.string().uuid(),
@@ -203,12 +204,9 @@ io.on('connection', (socket) => {
       return;
     }
     const roomId = parsed.data.roomId ?? DEFAULT_ROOM_ID;
-    const asSpectator = parsed.data.asSpectator ?? false;
 
-    let joinUsername = data.username;
-    if (asSpectator) {
-      joinUsername = (payload as { displayName?: string })?.displayName ?? `Spectator`;
-    } else if (!joinUsername || !isAllowedUser(joinUsername)) {
+    const joinUsername = data.username;
+    if (!joinUsername || !isAllowedUser(joinUsername)) {
       ack?.({ ok: false, error: 'Not logged in or unauthorized' });
       return;
     }
@@ -216,24 +214,25 @@ io.on('connection', (socket) => {
     const room = getOrCreateRoom(roomId);
     setupRoomCallbacks(room);
 
-    const player = room.addPlayer(
-      asSpectator ? (joinUsername as typeof joinUsername & string) : joinUsername!,
-      socket.id,
-      asSpectator
-    );
+    const player = room.addPlayer(joinUsername, socket.id);
     data.playerId = player.id;
     data.roomId = roomId;
-    if (!asSpectator) data.username = joinUsername;
+    data.username = joinUsername;
 
     socket.join(roomId);
+    
+    // Broadcast to all clients in the room after socket has joined
+    process.nextTick(() => {
+      io.to(roomId).emit('game_state', room.getPublicState());
+    });
+    
     ack?.({
       ok: true,
       playerId: player.id,
       roomId,
-      isAdmin: !asSpectator && joinUsername === ADMIN_USERNAME,
+      isAdmin: joinUsername === ADMIN_USERNAME,
       state: room.getPublicState(),
     });
-    broadcastState(room);
   });
 
   socket.on('player_ready', (payload, ack) => {
@@ -245,7 +244,11 @@ io.on('connection', (socket) => {
     const ready = Boolean(payload?.ready);
     const ok = room.setReady(data.playerId, ready);
     ack?.({ ok });
-    if (ok) broadcastState(room);
+    if (ok) {
+      process.nextTick(() => {
+        io.to(room.roomId).emit('game_state', room.getPublicState());
+      });
+    }
   });
 
   socket.on('admin_configure_roles', (payload, ack) => {
@@ -377,6 +380,23 @@ io.on('connection', (socket) => {
       return;
     }
     const ok = room.submitMafiaAction(data.playerId, parsed.data.targetId);
+    if (ok) broadcastState(room);
+    ack?.({ ok });
+  });
+
+  socket.on('mafia_chat_message', (payload, ack) => {
+    const room = data.roomId ? getOrCreateRoom(data.roomId) : null;
+    if (!room || !data.playerId) {
+      ack?.({ ok: false, error: 'Not in room' });
+      return;
+    }
+    const parsed = messageSchema.safeParse(payload);
+    if (!parsed.success) {
+      ack?.({ ok: false, error: 'Invalid message' });
+      return;
+    }
+    const ok = room.submitMafiaChatMessage(data.playerId, parsed.data.message);
+    if (ok) broadcastState(room);
     ack?.({ ok });
   });
 
