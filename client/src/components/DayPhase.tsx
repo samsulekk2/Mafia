@@ -1,5 +1,6 @@
 import type { DayResultPublic } from '@shared/types';
 import { useGameStore } from '../store/gameStore';
+import { getSocket } from '../lib/socket';
 
 interface Props {
   result: DayResultPublic;
@@ -13,6 +14,20 @@ function labelResult(value: string) {
 export function DayPhase({ result, round }: Props) {
   const detectiveDayReveal = useGameStore((s) => s.detectiveDayReveal);
   const myRole = useGameStore((s) => s.myRole);
+  const playerId = useGameStore((s) => s.playerId);
+  const gameState = useGameStore((s) => s.gameState);
+  const skipDiscussionVotes = gameState?.skipDiscussionVotes ?? [];
+
+  const hasVotedToSkip = playerId ? skipDiscussionVotes.includes(playerId) : false;
+  const alivePlayers = gameState?.players.filter(p => p.status === 'alive' && !p.isSpectator) ?? [];
+  const allVoted = skipDiscussionVotes.length === alivePlayers.length;
+
+  const handleSkipVote = () => {
+    if (!playerId) return;
+    getSocket().emit('toggle_skip_discussion', (res: { ok: boolean }) => {
+      if (!res.ok) console.error('Failed to toggle skip vote');
+    });
+  };
 
   const detectiveLabel =
     myRole === 'detective' && detectiveDayReveal && detectiveDayReveal.detectiveResult !== 'none'
@@ -20,6 +35,8 @@ export function DayPhase({ result, round }: Props) {
       : result.detectiveActed
         ? 'investigation completed'
         : 'none';
+
+  const canVote = playerId && gameState?.players.find(p => p.id === playerId)?.status === 'alive';
 
   return (
     <div className="max-w-lg mx-auto p-4 space-y-6">
@@ -49,6 +66,29 @@ export function DayPhase({ result, round }: Props) {
           {detectiveDayReveal.detectiveResult === 'correct' ? 'Mafia' : 'not Mafia'}
         </p>
       )}
+
+      <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+        <h3 className="text-sm font-medium text-mafia-muted mb-3">Skip Discussion Vote</h3>
+        <p className="text-xs text-mafia-muted mb-3">
+          {skipDiscussionVotes.length} / {alivePlayers.length} players voted to skip discussion
+        </p>
+        {canVote && (
+          <button
+            onClick={handleSkipVote}
+            disabled={allVoted}
+            className={`w-full py-2 px-4 rounded-lg font-medium transition-colors ${
+              hasVotedToSkip
+                ? 'bg-green-600 hover:bg-green-700 text-white'
+                : 'bg-mafia-primary hover:bg-mafia-primary/90 text-white'
+            } ${allVoted ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            {hasVotedToSkip ? 'Vote to Skip ✓' : 'Vote to Skip Discussion'}
+          </button>
+        )}
+        {allVoted && (
+          <p className="text-center text-green-400 text-sm mt-2">All players voted - skipping to voting!</p>
+        )}
+      </div>
 
       <p className="text-center text-mafia-muted text-sm">Discuss before voting begins…</p>
     </div>
