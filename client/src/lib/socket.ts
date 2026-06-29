@@ -4,6 +4,7 @@ import type {
   DayResultPublic,
   DetectiveInvestigationResult,
   GameStatePublic,
+  MafiaChatMessage,
   RoleAssignmentPayload,
   TimerSync,
   VotingResult,
@@ -97,6 +98,7 @@ interface ServerToClientEvents {
   voice_peer_joined: (payload: { socketId: string; username: string }) => void;
   voice_signal: (payload: { fromSocketId: string; fromUsername?: string; signal: unknown }) => void;
   kicked: (payload: { reason: string }) => void;
+  mafia_chat_update: (payload: MafiaChatMessage[]) => void;
 }
 
 let socket: GameSocket | null = null;
