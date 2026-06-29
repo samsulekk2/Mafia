@@ -39,6 +39,7 @@ export class GameEngine {
 
   private nightActions: NightActions = {};
   private votes: Map<string, string> = new Map();
+  private skipDiscussionVotes: Set<string> = new Set();
   private timerHandle: ReturnType<typeof setTimeout> | null = null;
   private onPhaseChange?: () => void;
 
@@ -154,6 +155,7 @@ export class GameEngine {
     this.round = 1;
     this.nightActions = {};
     this.votes.clear();
+    this.skipDiscussionVotes.clear();
     this.dayResult = null;
     this.votingResult = null;
     this.winner = null;
@@ -388,7 +390,31 @@ export class GameEngine {
     if (this.phase !== 'DAY') return;
     this.phase = 'VOTING';
     this.votes.clear();
+    this.skipDiscussionVotes.clear();
     this.startTimer('voting');
+  }
+
+  toggleSkipDiscussionVote(playerId: string): boolean {
+    if (this.phase !== 'DAY') return false;
+    const p = this.players.get(playerId);
+    if (!p || p.status !== 'alive' || p.isSpectator) return false;
+
+    if (this.skipDiscussionVotes.has(playerId)) {
+      this.skipDiscussionVotes.delete(playerId);
+    } else {
+      this.skipDiscussionVotes.add(playerId);
+    }
+
+    const alivePlayers = this.getAlivePlayers();
+    if (this.skipDiscussionVotes.size === alivePlayers.length) {
+      this.advanceDayToVoting();
+      this.onPhaseChange?.();
+    }
+    return true;
+  }
+
+  getSkipDiscussionVotes(): string[] {
+    return [...this.skipDiscussionVotes];
   }
 
   private startTimer(phase: 'night' | 'day' | 'voting'): void {
@@ -465,6 +491,7 @@ export class GameEngine {
       votingResult: this.votingResult,
       winner: this.winner,
       round: this.round,
+      skipDiscussionVotes: this.getSkipDiscussionVotes(),
     };
   }
 
