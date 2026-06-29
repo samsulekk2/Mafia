@@ -6,9 +6,13 @@ import { useGameStore } from '../store/gameStore';
 export function useVoiceChat() {
   const voiceEnabled = useGameStore((s) => s.gameState?.voiceChatEnabled ?? false);
   const phase = useGameStore((s) => s.gameState?.phase);
+  const playerId = useGameStore((s) => s.playerId);
+  const gameState = useGameStore((s) => s.gameState);
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
 
+  const player = gameState?.players.find(p => p.id === playerId);
+  const isAlive = player?.status === 'alive' && !player?.isSpectator;
   const active = voiceEnabled && (phase === 'LOBBY' || phase === 'DAY' || phase === 'ENDED');
 
   useEffect(() => {
@@ -44,9 +48,12 @@ export function useVoiceChat() {
       const pc = new RTCPeerConnection({ iceServers: getIceServers() });
       peersRef.current.set(socketId, pc);
 
-      localStreamRef.current?.getTracks().forEach((track) => {
-        pc.addTrack(track, localStreamRef.current!);
-      });
+      // Only send audio if player is alive
+      if (isAlive) {
+        localStreamRef.current?.getTracks().forEach((track) => {
+          pc.addTrack(track, localStreamRef.current!);
+        });
+      }
 
       pc.onicecandidate = (e) => {
         if (e.candidate) {
@@ -80,9 +87,12 @@ export function useVoiceChat() {
       if (!pc && signal.type === 'offer') {
         pc = new RTCPeerConnection({ iceServers: getIceServers() });
         peersRef.current.set(fromSocketId, pc);
-        localStreamRef.current?.getTracks().forEach((track) => {
-          pc!.addTrack(track, localStreamRef.current!);
-        });
+        // Only send audio if player is alive
+        if (isAlive) {
+          localStreamRef.current?.getTracks().forEach((track) => {
+            pc!.addTrack(track, localStreamRef.current!);
+          });
+        }
         pc.onicecandidate = (e) => {
           if (e.candidate) {
             socket.emit('voice_signal', {
