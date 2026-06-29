@@ -8,6 +8,12 @@ import { GameEngine, isAllowedUser } from './GameEngine.js';
 import { verifyPassword, getCredentials } from './auth.js';
 import { ADMIN_USERNAME } from '../../shared/types.js';
 
+// Load .env only in development (not on Fly.io production)
+if (process.env.NODE_ENV !== 'production') {
+  const dotenv = (await import('dotenv')).default;
+  dotenv.config();
+}
+
 getCredentials(); // fail fast if USER_CREDENTIALS is missing or invalid
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -282,9 +288,9 @@ io.on('connection', (socket) => {
     }
     const ok = room.toggleVoiceChat(parsed.data.enabled);
     if (ok) {
-      io.to(room.roomId).emit('voice_chat_status', { enabled: room.voiceChatEnabled });
+      io.to(room.roomId).emit('voice_chat_status', { enabled: room.gameConfig.voiceChatEnabled });
     }
-    ack?.({ ok, enabled: room.voiceChatEnabled });
+    ack?.({ ok, enabled: room.gameConfig.voiceChatEnabled });
   });
 
   socket.on('admin_start_game', (_payload, ack) => {
@@ -462,7 +468,7 @@ io.on('connection', (socket) => {
       ack?.({ ok: false, error: 'Not in room' });
       return;
     }
-    if (!room.voiceChatEnabled) {
+    if (!room.gameConfig.voiceChatEnabled) {
       ack?.({ ok: false, error: 'Voice chat disabled' });
       return;
     }
