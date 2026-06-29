@@ -258,6 +258,17 @@ io.on('connection', (socket) => {
     if (ok) broadcastState(room);
   });
 
+  socket.on('admin_configure_game', (payload, ack) => {
+    const room = data.roomId ? getOrCreateRoom(data.roomId) : null;
+    if (!room || !data.username || !room.isAdmin(data.username)) {
+      ack?.({ ok: false, error: 'Admin only' });
+      return;
+    }
+    const ok = room.setGameConfig(payload);
+    ack?.({ ok, gameConfig: room.gameConfig });
+    if (ok) broadcastState(room);
+  });
+
   socket.on('admin_toggle_voice', (payload, ack) => {
     const room = data.roomId ? getOrCreateRoom(data.roomId) : null;
     if (!room || !data.username || !room.isAdmin(data.username)) {
