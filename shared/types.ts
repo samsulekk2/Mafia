@@ -90,6 +90,7 @@ export interface GameStatePublic {
   votingResult: VotingResult | null;
   winner: 'mafia' | 'civilians' | null;
   round: number;
+  skipDiscussionVotes: string[];
 }
 
 export interface RoleAssignmentPayload {
