@@ -1,29 +1,29 @@
 export const ALLOWED_USERS = [
-  'Shindy',
-  'Ali',
-  'Sair',
-  'Faizan',
-  'Faris',
-  'Ahmed',
-  'Barry',
+  "Shindy",
+  "Ali",
+  "Sair",
+  "Faizan",
+  "Faris",
+  "Ahmed",
+  "Barry",
 ] as const;
 
-export const ADMIN_USERNAME = 'Shindy';
+export const ADMIN_USERNAME = "Shindy";
 
 export type Username = (typeof ALLOWED_USERS)[number];
 
-export type Role = 'mafia' | 'doctor' | 'detective' | 'civilian';
+export type Role = "mafia" | "doctor" | "detective" | "civilian";
 
 export type GamePhase =
-  | 'LOBBY'
-  | 'ROLE_ASSIGNMENT'
-  | 'NIGHT'
-  | 'DAY'
-  | 'VOTING'
-  | 'WIN_CHECK'
-  | 'ENDED';
+  | "LOBBY"
+  | "ROLE_ASSIGNMENT"
+  | "NIGHT"
+  | "DAY"
+  | "VOTING"
+  | "WIN_CHECK"
+  | "ENDED";
 
-export type PlayerStatus = 'alive' | 'dead';
+export type PlayerStatus = "alive" | "dead";
 
 export interface RoleConfig {
   mafia: number;
@@ -57,14 +57,14 @@ export interface NightActions {
 
 export interface DetectiveInvestigationResult {
   targetUsername: string;
-  result: 'correct' | 'incorrect';
+  result: "correct" | "incorrect";
 }
 
 export interface DayResultPublic {
-  mafiaResult: 'success' | 'fail' | 'none';
-  doctorResult: 'success' | 'fail' | 'none';
+  mafiaResult: "success" | "fail" | "none";
+  doctorResult: "success" | "fail" | "none";
   detectiveActed: boolean;
-  detectiveResult: 'correct' | 'incorrect' | 'none';
+  detectiveResult: "correct" | "incorrect" | "none";
   detectiveTargetName?: string;
   deathResult: { playerId: string; username: string } | null;
 }
@@ -92,15 +92,21 @@ export interface GameStatePublic {
   roleConfig: RoleConfig;
   voiceChatEnabled: boolean;
   timerEndsAt: number | null;
-  timerPhase: 'night' | 'day' | 'voting' | null;
+  timerPhase: "night" | "day" | "voting" | null;
   dayResult: DayResultPublic | null;
   votingResult: VotingResult | null;
-  winner: 'mafia' | 'civilians' | null;
+  winner: "mafia" | "civilians" | null;
   round: number;
   skipDiscussionVotes: string[];
   votedPlayerIds: string[];
   revealedRoles: Array<{ username: string; role: Role }> | null;
   mafiaChatMessages: MafiaChatMessage[];
+  gameConfig: {
+    nightTime: number;
+    dayTime: number;
+    votingTime: number;
+    revealRolesOnDeath: boolean;
+  };
 }
 
 export interface RoleAssignmentPayload {
@@ -109,7 +115,7 @@ export interface RoleAssignmentPayload {
 }
 
 export interface TimerSync {
-  phase: 'night' | 'day' | 'voting';
+  phase: "night" | "day" | "voting";
   endsAt: number;
   remainingSeconds: number;
 }
