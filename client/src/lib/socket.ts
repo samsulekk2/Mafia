@@ -37,6 +37,17 @@ interface ClientToServerEvents {
     payload: { mafia: number; doctor: number; detective: number },
     ack?: (res: { ok: boolean; error?: string; roleConfig?: unknown }) => void
   ) => void;
+  admin_configure_game: (
+    payload: {
+      nightTime?: number;
+      dayTime?: number;
+      votingTime?: number;
+      voiceChatEnabled?: boolean;
+      allowSpectators?: boolean;
+      revealRolesOnDeath?: boolean;
+    },
+    ack?: (res: { ok: boolean; gameConfig?: unknown }) => void
+  ) => void;
   admin_toggle_voice: (payload: { enabled: boolean }, ack?: (res: { ok: boolean; enabled?: boolean }) => void) => void;
   admin_start_game: (_payload: unknown, ack?: (res: { ok: boolean; error?: string }) => void) => void;
   admin_end_game: (_payload: unknown, ack?: (res: { ok: boolean }) => void) => void;
@@ -45,6 +56,7 @@ interface ClientToServerEvents {
   role_action_mafia: (payload: { targetId: string }, ack?: (res: { ok: boolean }) => void) => void;
   role_action_doctor: (payload: { targetId: string }, ack?: (res: { ok: boolean }) => void) => void;
   role_action_detective: (payload: { targetId: string }, ack?: (res: { ok: boolean }) => void) => void;
+  toggle_skip_discussion: (ack?: (res: { ok: boolean }) => void) => void;
   vote_player: (payload: { targetId: string }, ack?: (res: { ok: boolean }) => void) => void;
   request_timer_sync: (
     _payload: unknown,
