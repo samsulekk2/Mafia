@@ -16,5 +16,6 @@ COPY --from=build /app/server/dist ./dist
 COPY --from=build /app/shared ./shared
 RUN npm install -w server --omit=dev
 ENV NODE_ENV=production
+ENV PORT=3001
 EXPOSE 3001
 CMD ["node", "dist/server/src/index.js"]
