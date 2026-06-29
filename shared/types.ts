@@ -31,6 +31,15 @@ export interface RoleConfig {
   detective: number;
 }
 
+export interface GameConfig {
+  nightTime: number;
+  dayTime: number;
+  votingTime: number;
+  voiceChatEnabled: boolean;
+  allowSpectators: boolean;
+  revealRolesOnDeath: boolean;
+}
+
 export interface Player {
   id: string;
   username: string;
@@ -39,6 +48,7 @@ export interface Player {
   role?: Role;
   ready: boolean;
   isSpectator: boolean;
+  disconnected: boolean;
 }
 
 export interface NightActions {
@@ -55,14 +65,14 @@ export interface DetectiveInvestigationResult {
 export interface DayResultPublic {
   mafiaResult: 'success' | 'fail' | 'none';
   doctorResult: 'success' | 'fail' | 'none';
-  /** Public day broadcast — detective details sent separately to detective only */
   detectiveActed: boolean;
+  detectiveResult: 'correct' | 'incorrect' | 'none';
+  detectiveTargetName?: string;
   deathResult: { playerId: string; username: string } | null;
 }
 
 export interface DayResult extends DayResultPublic {
-  detectiveResult: 'correct' | 'incorrect' | 'none';
-  detectiveTargetName?: string;
+  // Now identical to DayResultPublic since detective result is public
 }
 
 export interface VotingResult {
