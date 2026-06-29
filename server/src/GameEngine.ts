@@ -6,6 +6,7 @@ import {
   type GameConfig,
   type GamePhase,
   type GameStatePublic,
+  type MafiaChatMessage,
   type NightActions,
   type Player,
   type Role,
@@ -36,7 +37,6 @@ export class GameEngine {
     dayTime: DEFAULT_TIMERS.day,
     votingTime: DEFAULT_TIMERS.voting,
     voiceChatEnabled: false,
-    allowSpectators: true,
     revealRolesOnDeath: true,
   };
   timerEndsAt: number | null = null;
@@ -49,6 +49,7 @@ export class GameEngine {
   private nightActions: NightActions = {};
   private votes: Map<string, string> = new Map();
   private skipDiscussionVotes: Set<string> = new Set();
+  private mafiaChatMessages: MafiaChatMessage[] = [];
   private timerHandle: ReturnType<typeof setTimeout> | null = null;
   private onPhaseChange?: () => void;
 
@@ -69,7 +70,7 @@ export class GameEngine {
     return this.phase === 'LOBBY' || this.phase === 'ENDED';
   }
 
-  addPlayer(username: string, socketId: string, asSpectator = false): Player {
+  addPlayer(username: string, socketId: string): Player {
     const existing = [...this.players.values()].find((p) => p.username === username);
     if (existing) {
       existing.socketId = socketId;
@@ -81,7 +82,6 @@ export class GameEngine {
       socketId,
       status: 'alive',
       ready: false,
-      isSpectator: asSpectator,
       disconnected: false,
     };
     this.players.set(player.id, player);
@@ -123,7 +123,7 @@ export class GameEngine {
 
   setReady(playerId: string, ready: boolean): boolean {
     const p = this.players.get(playerId);
-    if (!p || p.isSpectator || this.phase !== 'LOBBY') return false;
+    if (!p || this.phase !== 'LOBBY') return false;
     p.ready = ready;
     return true;
   }
@@ -150,7 +150,7 @@ export class GameEngine {
   }
 
   getActivePlayers(): Player[] {
-    return [...this.players.values()].filter((p) => !p.isSpectator);
+    return [...this.players.values()];
   }
 
   getAlivePlayers(): Player[] {
@@ -177,6 +177,7 @@ export class GameEngine {
     this.nightActions = {};
     this.votes.clear();
     this.skipDiscussionVotes.clear();
+    this.mafiaChatMessages = [];
     this.dayResult = null;
     this.votingResult = null;
     this.winner = null;
@@ -204,6 +205,7 @@ export class GameEngine {
     this.round = 0;
     this.nightActions = {};
     this.votes.clear();
+    this.skipDiscussionVotes.clear();
     this.dayResult = null;
     this.votingResult = null;
     this.winner = null;
@@ -252,9 +254,11 @@ export class GameEngine {
   submitMafiaAction(playerId: string, targetId: string): boolean {
     if (this.phase !== 'NIGHT') return false;
     const p = this.players.get(playerId);
-    if (!p || p.role !== 'mafia' || p.status !== 'alive' || p.isSpectator || p.disconnected) return false;
+    if (!p || p.role !== 'mafia' || p.status !== 'alive' || p.disconnected) return false;
     const target = this.players.get(targetId);
-    if (!target || target.status !== 'alive' || target.isSpectator) return false;
+    if (!target || target.status !== 'alive') return false;
+    // Prevent Mafia from targeting other Mafia members
+    if (target.role === 'mafia') return false;
     this.nightActions.mafiaTarget = targetId;
     return true;
   }
@@ -262,9 +266,9 @@ export class GameEngine {
   submitDoctorAction(playerId: string, targetId: string): boolean {
     if (this.phase !== 'NIGHT') return false;
     const p = this.players.get(playerId);
-    if (!p || p.role !== 'doctor' || p.status !== 'alive' || p.isSpectator || p.disconnected) return false;
+    if (!p || p.role !== 'doctor' || p.status !== 'alive' || p.disconnected) return false;
     const target = this.players.get(targetId);
-    if (!target || target.status !== 'alive' || target.isSpectator) return false;
+    if (!target || target.status !== 'alive') return false;
     this.nightActions.doctorTarget = targetId;
     return true;
   }
@@ -272,9 +276,9 @@ export class GameEngine {
   submitDetectiveAction(playerId: string, targetId: string): boolean {
     if (this.phase !== 'NIGHT') return false;
     const p = this.players.get(playerId);
-    if (!p || p.role !== 'detective' || p.status !== 'alive' || p.isSpectator || p.disconnected) return false;
+    if (!p || p.role !== 'detective' || p.status !== 'alive' || p.disconnected) return false;
     const target = this.players.get(targetId);
-    if (!target || target.status !== 'alive' || target.isSpectator) return false;
+    if (!target || target.status !== 'alive') return false;
     this.nightActions.detectiveTarget = targetId;
     return true;
   }
@@ -309,6 +313,9 @@ export class GameEngine {
       }
     }
 
+    // Clear mafia chat at end of night
+    this.clearMafiaChat();
+
     const result: DayResult = {
       mafiaResult,
       doctorResult,
@@ -335,10 +342,19 @@ export class GameEngine {
   submitVote(voterId: string, targetId: string): boolean {
     if (this.phase !== 'VOTING') return false;
     const voter = this.players.get(voterId);
-    if (!voter || voter.status !== 'alive' || voter.isSpectator || voter.disconnected) return false;
+    if (!voter || voter.status !== 'alive' || voter.disconnected) return false;
     const target = this.players.get(targetId);
-    if (!target || target.status !== 'alive' || target.isSpectator) return false;
+    if (!target || target.status !== 'alive') return false;
     this.votes.set(voterId, targetId);
+    
+    // Auto-advance if all alive players have voted
+    const alivePlayers = this.getAlivePlayers();
+    if (this.votes.size === alivePlayers.length) {
+      this.clearTimer();
+      this.resolveVoting();
+      this.onPhaseChange?.();
+    }
+    
     return true;
   }
 
@@ -427,7 +443,7 @@ export class GameEngine {
   toggleSkipDiscussionVote(playerId: string): boolean {
     if (this.phase !== 'DAY') return false;
     const p = this.players.get(playerId);
-    if (!p || p.status !== 'alive' || p.isSpectator) return false;
+    if (!p || p.status !== 'alive') return false;
 
     if (this.skipDiscussionVotes.has(playerId)) {
       this.skipDiscussionVotes.delete(playerId);
@@ -506,7 +522,6 @@ export class GameEngine {
         username: p.username,
         status: p.status,
         ready: p.ready,
-        isSpectator: p.isSpectator,
       })),
       roleConfig: { ...this.roleConfig },
       voiceChatEnabled: this.gameConfig.voiceChatEnabled,
@@ -517,12 +532,46 @@ export class GameEngine {
       winner: this.winner,
       round: this.round,
       skipDiscussionVotes: this.getSkipDiscussionVotes(),
+      votedPlayerIds: [...this.votes.keys()],
+      revealedRoles: this.winner ? this.getRevealedRoles() : null,
+      mafiaChatMessages: this.mafiaChatMessages,
     };
   }
 
   getRemainingSeconds(): number {
     if (!this.timerEndsAt) return 0;
     return Math.max(0, Math.ceil((this.timerEndsAt - Date.now()) / 1000));
+  }
+
+  getRevealedRoles(): Array<{ username: string; role: Role }> {
+    const revealed: Array<{ username: string; role: Role }> = [];
+    for (const player of this.players.values()) {
+      if (player.role) {
+        revealed.push({ username: player.username, role: player.role });
+      }
+    }
+    return revealed;
+  }
+
+  submitMafiaChatMessage(playerId: string, message: string): boolean {
+    if (this.phase !== 'NIGHT') return false;
+    const p = this.players.get(playerId);
+    if (!p || p.role !== 'mafia' || p.status !== 'alive' || p.disconnected) return false;
+    
+    const chatMessage: MafiaChatMessage = {
+      id: `${Date.now()}-${playerId}`,
+      senderId: playerId,
+      senderUsername: p.username,
+      message,
+      timestamp: Date.now(),
+    };
+    
+    this.mafiaChatMessages.push(chatMessage);
+    return true;
+  }
+
+  clearMafiaChat(): void {
+    this.mafiaChatMessages = [];
   }
 }
 
