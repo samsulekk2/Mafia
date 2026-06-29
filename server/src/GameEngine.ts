@@ -2,6 +2,8 @@ import {
   ALLOWED_USERS,
   ADMIN_USERNAME,
   type DayResult,
+  type DayResultPublic,
+  type GameConfig,
   type GamePhase,
   type GameStatePublic,
   type NightActions,
@@ -13,7 +15,7 @@ import {
 } from '../../shared/types.js';
 import { v4 as uuidv4 } from 'uuid';
 
-const TIMERS = { night: 60, day: 240, voting: 240 } as const;
+const DEFAULT_TIMERS = { night: 60, day: 240, voting: 240 } as const;
 
 function shuffle<T>(arr: T[]): T[] {
   const copy = [...arr];
@@ -29,7 +31,14 @@ export class GameEngine {
   phase: GamePhase = 'LOBBY';
   players: Map<string, Player> = new Map();
   roleConfig: RoleConfig = { mafia: 2, doctor: 1, detective: 1 };
-  voiceChatEnabled = false;
+  gameConfig: GameConfig = {
+    nightTime: DEFAULT_TIMERS.night,
+    dayTime: DEFAULT_TIMERS.day,
+    votingTime: DEFAULT_TIMERS.voting,
+    voiceChatEnabled: false,
+    allowSpectators: true,
+    revealRolesOnDeath: true,
+  };
   timerEndsAt: number | null = null;
   timerPhase: 'night' | 'day' | 'voting' | null = null;
   dayResult: DayResult | null = null;
@@ -73,6 +82,7 @@ export class GameEngine {
       status: 'alive',
       ready: false,
       isSpectator: asSpectator,
+      disconnected: false,
     };
     this.players.set(player.id, player);
     return player;
@@ -83,6 +93,10 @@ export class GameEngine {
       if (p.socketId === socketId) {
         if (this.phase === 'LOBBY' || this.phase === 'ENDED') {
           this.players.delete(id);
+        } else {
+          // Mark as disconnected instead of removing during game
+          p.socketId = '';
+          p.disconnected = true;
         }
         return p;
       }
@@ -94,6 +108,7 @@ export class GameEngine {
     const p = this.players.get(playerId);
     if (!p) return null;
     p.socketId = socketId;
+    p.disconnected = false;
     return p;
   }
 
@@ -124,7 +139,13 @@ export class GameEngine {
 
   toggleVoiceChat(enabled: boolean): boolean {
     if (!this.canAdminAct()) return false;
-    this.voiceChatEnabled = enabled;
+    this.gameConfig.voiceChatEnabled = enabled;
+    return true;
+  }
+
+  setGameConfig(config: Partial<GameConfig>): boolean {
+    if (!this.canAdminAct()) return false;
+    Object.assign(this.gameConfig, config);
     return true;
   }
 
@@ -231,7 +252,7 @@ export class GameEngine {
   submitMafiaAction(playerId: string, targetId: string): boolean {
     if (this.phase !== 'NIGHT') return false;
     const p = this.players.get(playerId);
-    if (!p || p.role !== 'mafia' || p.status !== 'alive' || p.isSpectator) return false;
+    if (!p || p.role !== 'mafia' || p.status !== 'alive' || p.isSpectator || p.disconnected) return false;
     const target = this.players.get(targetId);
     if (!target || target.status !== 'alive' || target.isSpectator) return false;
     this.nightActions.mafiaTarget = targetId;
@@ -241,7 +262,7 @@ export class GameEngine {
   submitDoctorAction(playerId: string, targetId: string): boolean {
     if (this.phase !== 'NIGHT') return false;
     const p = this.players.get(playerId);
-    if (!p || p.role !== 'doctor' || p.status !== 'alive' || p.isSpectator) return false;
+    if (!p || p.role !== 'doctor' || p.status !== 'alive' || p.isSpectator || p.disconnected) return false;
     const target = this.players.get(targetId);
     if (!target || target.status !== 'alive' || target.isSpectator) return false;
     this.nightActions.doctorTarget = targetId;
@@ -251,7 +272,7 @@ export class GameEngine {
   submitDetectiveAction(playerId: string, targetId: string): boolean {
     if (this.phase !== 'NIGHT') return false;
     const p = this.players.get(playerId);
-    if (!p || p.role !== 'detective' || p.status !== 'alive' || p.isSpectator) return false;
+    if (!p || p.role !== 'detective' || p.status !== 'alive' || p.isSpectator || p.disconnected) return false;
     const target = this.players.get(targetId);
     if (!target || target.status !== 'alive' || target.isSpectator) return false;
     this.nightActions.detectiveTarget = targetId;
@@ -299,13 +320,22 @@ export class GameEngine {
     this.dayResult = result;
     this.phase = 'DAY';
     this.startTimer('day');
+
+    // Check win condition after night kill
+    const win = this.checkWin();
+    if (win) {
+      this.winner = win;
+      this.phase = 'ENDED';
+      this.clearTimer();
+    }
+
     return result;
   }
 
   submitVote(voterId: string, targetId: string): boolean {
     if (this.phase !== 'VOTING') return false;
     const voter = this.players.get(voterId);
-    if (!voter || voter.status !== 'alive' || voter.isSpectator) return false;
+    if (!voter || voter.status !== 'alive' || voter.isSpectator || voter.disconnected) return false;
     const target = this.players.get(targetId);
     if (!target || target.status !== 'alive' || target.isSpectator) return false;
     this.votes.set(voterId, targetId);
@@ -419,7 +449,7 @@ export class GameEngine {
 
   private startTimer(phase: 'night' | 'day' | 'voting'): void {
     this.clearTimer();
-    const seconds = TIMERS[phase];
+    const seconds = this.gameConfig[`${phase}Time` as keyof GameConfig] as number;
     this.timerPhase = phase;
     this.timerEndsAt = Date.now() + seconds * 1000;
     this.timerHandle = setTimeout(() => this.onTimerEnd(phase), seconds * 1000);
@@ -463,13 +493,8 @@ export class GameEngine {
     return [...this.players.values()].find((p) => p.role === 'detective' && p.status === 'alive');
   }
 
-  toPublicDayResult(result: DayResult): Omit<DayResult, 'detectiveResult' | 'detectiveTargetName'> {
-    return {
-      mafiaResult: result.mafiaResult,
-      doctorResult: result.doctorResult,
-      detectiveActed: result.detectiveActed,
-      deathResult: result.deathResult,
-    };
+  toPublicDayResult(result: DayResult): DayResultPublic {
+    return result;
   }
 
   getPublicState(): GameStatePublic {
@@ -484,7 +509,7 @@ export class GameEngine {
         isSpectator: p.isSpectator,
       })),
       roleConfig: { ...this.roleConfig },
-      voiceChatEnabled: this.voiceChatEnabled,
+      voiceChatEnabled: this.gameConfig.voiceChatEnabled,
       timerEndsAt: this.timerEndsAt,
       timerPhase: this.timerPhase,
       dayResult: this.dayResult ? this.toPublicDayResult(this.dayResult) : null,
