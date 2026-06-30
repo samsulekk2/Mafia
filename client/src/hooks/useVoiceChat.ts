@@ -12,8 +12,9 @@ export function useVoiceChat() {
   const localStreamRef = useRef<MediaStream | null>(null);
 
   const player = gameState?.players.find(p => p.id === playerId);
-  const isAlive = player?.status === 'alive' && !player?.isSpectator;
-  const active = voiceEnabled && (phase === 'LOBBY' || phase === 'DAY' || phase === 'ENDED');
+  const isAlive = player?.status === 'alive';
+  const gameInProgress = phase !== 'LOBBY' && phase !== 'ENDED';
+  const active = voiceEnabled && (phase === 'LOBBY' || gameInProgress || phase === 'ENDED');
 
   useEffect(() => {
     if (!active) {
