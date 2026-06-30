@@ -23,7 +23,7 @@ interface ClientToServerEvents {
     ack?: (res: { ok: boolean; error?: string; username?: string; isAdmin?: boolean }) => void
   ) => void;
   join_room: (
-    payload: { roomId?: string; asSpectator?: boolean; displayName?: string },
+    payload: { roomId?: string },
     ack?: (res: {
       ok: boolean;
       error?: string;
@@ -44,7 +44,6 @@ interface ClientToServerEvents {
       dayTime?: number;
       votingTime?: number;
       voiceChatEnabled?: boolean;
-      allowSpectators?: boolean;
       revealRolesOnDeath?: boolean;
     },
     ack?: (res: { ok: boolean; gameConfig?: unknown }) => void
@@ -99,6 +98,7 @@ interface ServerToClientEvents {
   voice_signal: (payload: { fromSocketId: string; fromUsername?: string; signal: unknown }) => void;
   kicked: (payload: { reason: string }) => void;
   mafia_chat_update: (payload: MafiaChatMessage[]) => void;
+  mafia_target_update: (payload: { targetUsername: string }) => void;
 }
 
 let socket: GameSocket | null = null;
