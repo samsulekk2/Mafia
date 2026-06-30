@@ -23,6 +23,7 @@ export function useSocketConnection() {
         reconnecting.current = false;
         if (!res?.ok) {
           clearSession();
+          store().reset(); // also clears sessionRestoring
           return;
         }
         store().setUsername(session.username);
@@ -35,6 +36,7 @@ export function useSocketConnection() {
         if (res.state?.phase === 'DAY' && res.state.dayResult) {
           store().setLastDayResult(res.state.dayResult);
         }
+        store().setSessionRestoring(false);
       });
     }
 
@@ -64,15 +66,21 @@ export function useSocketConnection() {
       if (state.phase === 'DAY' && state.dayResult) {
         store().setLastDayResult(state.dayResult);
       }
+      // New session started — wipe all previous match results
+      if (state.phase === 'LOBBY') {
+        store().clearGameResults();
+      }
     });
 
     socket.on('roles_assigned', (payload) => store().setRoleAssignment(payload));
 
     socket.on('night_start', ({ timer }) => {
       store().setTimer(timer);
+      store().setGameWinner(null);
       store().setLastVotingResult(null);
       store().setLastDayResult(null);
       store().setMafiaChatMessages([]);
+      store().setMafiaCurrentTarget(null);
       store().setDetectiveInvestigation(null);
       store().setDetectiveDayReveal(null);
     });
@@ -94,7 +102,7 @@ export function useSocketConnection() {
 
     socket.on('voting_result', (result) => store().setLastVotingResult(result));
     socket.on('mafia_chat_update', (messages) => store().setMafiaChatMessages(messages));
-
+    socket.on('mafia_target_update', ({ targetUsername }) => store().setMafiaCurrentTarget(targetUsername));
     socket.on('game_end', ({ winner }) => store().setGameWinner(winner));
 
     socket.on('voice_chat_status', ({ enabled }) => {
@@ -130,6 +138,7 @@ export function useSocketConnection() {
       socket.off('voting_start');
       socket.off('voting_result');
       socket.off('mafia_chat_update');
+      socket.off('mafia_target_update');
       socket.off('game_end');
       socket.off('voice_chat_status');
       socket.off('kicked');
