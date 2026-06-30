@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { getSocket } from '../lib/socket';
 import type { GameStatePublic, VotingResult } from '@shared/types';
 
@@ -15,10 +16,11 @@ export function VotingPhase({ state, playerId, lastResult }: Props) {
 
   const me = state.players.find((p) => p.id === playerId);
   const canVote = me?.status === 'alive';
-  const targets = state.players.filter((p) => p.status === 'alive');
-  const votedPlayerIds = state.votedPlayerIds ?? [];
   const alivePlayers = state.players.filter((p) => p.status === 'alive');
-  const allVoted = votedPlayerIds.length === alivePlayers.length;
+  // Self excluded from selection — you cannot vote for yourself
+  const votingTargets = alivePlayers.filter((p) => p.id !== playerId);
+  const votedPlayerIds = state.votedPlayerIds ?? [];
+  const allVoted = votedPlayerIds.length === alivePlayers.length && alivePlayers.length > 0;
 
   const submitVote = () => {
     if (!selected) return;
@@ -27,86 +29,145 @@ export function VotingPhase({ state, playerId, lastResult }: Props) {
     });
   };
 
+  // Show result screen briefly after phase ends
   if (state.phase !== 'VOTING' && lastResult) {
     return (
       <div className="max-w-lg mx-auto p-4 text-center space-y-4">
         <h2 className="font-display text-2xl text-mafia-accent">Vote Result</h2>
         {lastResult.eliminatedUsername ? (
-          <p>
-            {lastResult.eliminatedUsername} was eliminated
-            {lastResult.tie && ' (tie — random pick)'}
+          <p className="dark:text-white text-gray-900">
+            <span className="font-bold text-mafia-accent">{lastResult.eliminatedUsername}</span> was eliminated
+            {lastResult.tie && (
+              <span className="ml-2 text-xs dark:text-mafia-muted text-gray-500">(tie — random pick)</span>
+            )}
           </p>
         ) : (
-          <p>No elimination this round</p>
+          <p className="dark:text-mafia-muted text-gray-600">No elimination this round</p>
         )}
       </div>
     );
   }
 
   return (
-    <div className="max-w-lg mx-auto p-4 space-y-6">
+    <div className="max-w-lg mx-auto p-4 space-y-5">
       <header className="text-center">
         <h2 className="font-display text-3xl text-orange-400">Voting</h2>
-        <p className="dark:text-mafia-muted text-gray-600 text-sm mt-2">Vote to eliminate a suspect</p>
+        <p className="dark:text-mafia-muted text-gray-500 text-sm mt-1">Vote to eliminate a suspect</p>
       </header>
 
+      {/* Dead player notice */}
       {!canVote && (
-        <p className="text-center dark:text-mafia-muted text-gray-600">You are dead and cannot vote</p>
+        <div className="p-4 rounded-xl dark:bg-white/5 bg-gray-100 text-center dark:border border-white/10 border-gray-200">
+          <p className="dark:text-mafia-muted text-gray-500 text-sm">You are dead — you cannot vote</p>
+        </div>
       )}
 
-      {canVote && (
-        <>
+      {/* Target selection */}
+      {canVote && !voted && (
+        <div className="space-y-3">
+          <p className="text-xs uppercase tracking-widest dark:text-mafia-muted text-gray-500 text-center">
+            Select a player to eliminate
+          </p>
           <div className="grid grid-cols-2 gap-2">
-            {targets.map((p) => (
-              <button
+            {votingTargets.map((p) => (
+              <motion.button
                 key={p.id}
+                whileTap={{ scale: 0.97 }}
                 onClick={() => setSelected(p.id)}
-                disabled={voted}
-                className={`p-3 rounded-lg border transition-all ${
+                className={`p-3 rounded-xl border-2 font-medium text-sm transition-all ${
                   selected === p.id
-                    ? 'border-orange-400 bg-orange-400/20'
-                    : 'dark:border-white/10 border-gray-200 dark:bg-white/5 bg-gray-50 hover:dark:border-white/30 hover:border-gray-300'
-                } disabled:opacity-50`}
+                    ? 'border-orange-400 bg-orange-400/20 dark:text-white text-gray-900'
+                    : 'dark:border-white/10 border-gray-200 dark:bg-white/5 bg-white dark:text-white text-gray-900 dark:hover:border-orange-400/40 hover:border-orange-300'
+                }`}
               >
                 {p.username}
-              </button>
+                {p.id === playerId && (
+                  <span className="ml-1 text-xs text-orange-400">(you)</span>
+                )}
+              </motion.button>
             ))}
           </div>
-          <button
-            disabled={!selected || voted}
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            disabled={!selected}
             onClick={submitVote}
-            className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-700 disabled:opacity-40 font-medium text-white"
+            className="w-full py-3.5 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-white transition-colors text-base"
           >
-            {voted ? 'Vote cast (hidden until end)' : 'Cast vote'}
-          </button>
-        </>
+            Cast Vote
+          </motion.button>
+        </div>
       )}
 
-      <div className="dark:bg-white/5 bg-gray-100 rounded-xl p-4 dark:border border-white/10 border-gray-300">
-        <h3 className="text-sm font-medium dark:text-mafia-muted text-gray-600 mb-3">Voting Progress</h3>
-        <p className="text-xs dark:text-mafia-muted text-gray-600 mb-3">
-          {votedPlayerIds.length} / {alivePlayers.length} players have voted
-        </p>
-        <div className="space-y-2">
-          {alivePlayers.map((p) => (
-            <div key={p.id} className="flex items-center justify-between text-sm">
-              <span className="dark:text-white text-gray-900">{p.username}</span>
-              {votedPlayerIds.includes(p.id) ? (
-                <span className="text-green-400">✓ Voted</span>
-              ) : (
-                <span className="dark:text-mafia-muted text-gray-600">Waiting...</span>
-              )}
-            </div>
-          ))}
+      {/* Already voted confirmation */}
+      {canVote && voted && (
+        <div className="p-4 rounded-xl dark:bg-green-900/20 bg-green-50 dark:border border-green-500/30 border-green-200 text-center">
+          <p className="dark:text-green-400 text-green-600 font-medium">✓ Vote cast — waiting for others</p>
+          <p className="text-xs dark:text-mafia-muted text-gray-500 mt-1">Votes are hidden until all players finish</p>
         </div>
+      )}
+
+      {/* ── Real-time live voting panel ── visible to EVERYONE */}
+      <div className="dark:bg-white/5 bg-gray-50 rounded-xl dark:border border-white/10 border-gray-200 overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 dark:border-b border-white/10 border-b border-gray-200">
+          <h3 className="text-sm font-semibold dark:text-white text-gray-900">Live Voting Panel</h3>
+          <span
+            className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+              allVoted
+                ? 'bg-green-500/20 text-green-400'
+                : 'dark:bg-white/10 bg-gray-200 dark:text-mafia-muted text-gray-600'
+            }`}
+          >
+            {votedPlayerIds.length} / {alivePlayers.length} voted
+          </span>
+        </div>
+
+        <div className="divide-y dark:divide-white/5 divide-gray-100">
+          {alivePlayers.map((p) => {
+            const hasVoted = votedPlayerIds.includes(p.id);
+            return (
+              <div
+                key={p.id}
+                className={`flex items-center justify-between px-4 py-3 transition-colors duration-300 ${
+                  hasVoted ? 'dark:bg-green-900/10 bg-green-50' : ''
+                }`}
+              >
+                <span className={`text-sm font-medium ${
+                  hasVoted ? 'dark:text-white text-gray-900' : 'dark:text-mafia-muted text-gray-500'
+                }`}>
+                  {p.username}
+                  {p.id === playerId && (
+                    <span className="ml-1.5 text-xs text-orange-400">(you)</span>
+                  )}
+                </span>
+                {hasVoted ? (
+                  <motion.span
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                    className="text-sm font-bold text-green-400"
+                  >
+                    ✓ Voted
+                  </motion.span>
+                ) : (
+                  <span className="text-xs dark:text-mafia-muted text-gray-400">waiting…</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
         {allVoted && (
-          <p className="text-center text-green-400 text-sm mt-3">All votes cast - calculating results...</p>
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="px-4 py-3 text-center dark:bg-green-900/10 bg-green-50 dark:border-t border-white/10 border-t border-green-100"
+          >
+            <p className="text-green-400 text-sm font-semibold">
+              All votes in — results coming…
+            </p>
+          </motion.div>
         )}
       </div>
-
-      {canVote && voted && (
-        <p className="text-center text-xs dark:text-mafia-muted text-gray-600">Votes are hidden until the phase ends</p>
-      )}
     </div>
   );
 }

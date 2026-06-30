@@ -1,6 +1,7 @@
 import type { DayResultPublic } from '@shared/types';
 import { useGameStore } from '../store/gameStore';
 import { getSocket } from '../lib/socket';
+import { motion } from 'framer-motion';
 
 interface Props {
   result: DayResultPublic;
@@ -12,15 +13,14 @@ function labelResult(value: string) {
 }
 
 export function DayPhase({ result, round }: Props) {
-  const detectiveDayReveal = useGameStore((s) => s.detectiveDayReveal);
-  const myRole = useGameStore((s) => s.myRole);
   const playerId = useGameStore((s) => s.playerId);
   const gameState = useGameStore((s) => s.gameState);
   const skipDiscussionVotes = gameState?.skipDiscussionVotes ?? [];
 
   const hasVotedToSkip = playerId ? skipDiscussionVotes.includes(playerId) : false;
-  const alivePlayers = gameState?.players.filter(p => p.status === 'alive' && !p.isSpectator) ?? [];
-  const allVoted = skipDiscussionVotes.length === alivePlayers.length;
+  const alivePlayers = gameState?.players.filter((p) => p.status === 'alive') ?? [];
+  const allVoted = skipDiscussionVotes.length === alivePlayers.length && alivePlayers.length > 0;
+  const canVote = playerId && gameState?.players.find((p) => p.id === playerId)?.status === 'alive';
 
   const handleSkipVote = () => {
     if (!playerId) return;
@@ -29,77 +29,90 @@ export function DayPhase({ result, round }: Props) {
     });
   };
 
-  const detectiveLabel =
-    myRole === 'detective' && detectiveDayReveal && detectiveDayReveal.detectiveResult !== 'none'
-      ? `${labelResult(detectiveDayReveal.detectiveResult)} (${detectiveDayReveal.detectiveTargetName})`
-      : result.detectiveActed
-        ? 'investigation completed'
-        : 'none';
-
-  const canVote = playerId && gameState?.players.find(p => p.id === playerId)?.status === 'alive';
-
   return (
-    <div className="max-w-lg mx-auto p-4 space-y-6">
+    <div className="max-w-lg mx-auto p-4 space-y-5">
       <header className="text-center">
         <h2 className="font-display text-3xl text-yellow-400">Day {round}</h2>
-        <p className="text-mafia-muted text-sm mt-2">The sun rises. Here is what happened…</p>
+        <p className="dark:text-mafia-muted text-gray-600 text-sm mt-2">
+          The sun rises. Here is what happened…
+        </p>
       </header>
 
-      <div className="space-y-3 bg-white/5 rounded-xl p-4 border border-white/10">
-        <Row label="Mafia kill" value={labelResult(result.mafiaResult)} />
-        <Row label="Doctor save" value={labelResult(result.doctorResult)} />
-        <Row label="Detective" value={detectiveLabel} />
-        <div className="pt-2 border-t border-white/10">
+      {/* Night results */}
+      <div className="dark:bg-white/5 bg-gray-50 rounded-xl dark:border border-white/10 border-gray-200 overflow-hidden">
+        <div className="px-4 py-3 dark:border-b border-white/10 border-b border-gray-200">
+          <p className="text-xs uppercase tracking-widest dark:text-mafia-muted text-gray-500 font-semibold">
+            Night Summary
+          </p>
+        </div>
+        <div className="divide-y dark:divide-white/5 divide-gray-100">
+          <Row label="Mafia kill" value={labelResult(result.mafiaResult)} />
+          <div className="flex justify-between items-center px-4 py-3 text-sm">
+            <span className="dark:text-mafia-muted text-gray-500">Doctor</span>
+            <span className="capitalize dark:text-white text-gray-900">
+              {result.doctorResult === 'success' ? 'saved correctly' : 'saved wrong'}
+            </span>
+          </div>
+          <div className="flex justify-between items-center px-4 py-3 text-sm">
+            <span className="dark:text-mafia-muted text-gray-500">Detective</span>
+            <span className={`font-medium ${
+              result.detectiveResult === 'correct' ? 'text-green-400' : 'dark:text-mafia-muted text-gray-400'
+            }`}>
+              {result.detectiveResult === 'correct' ? 'Guessed correct ✓' : 'Guessed wrong ✗'}
+            </span>
+          </div>
+        </div>
+        <div className={`px-4 py-4 text-center border-t ${
+          result.deathResult
+            ? 'dark:border-red-500/20 border-red-200 dark:bg-red-900/10 bg-red-50'
+            : 'dark:border-green-500/20 border-green-200 dark:bg-green-900/10 bg-green-50'
+        } dark:border-t border-t`}>
           {result.deathResult ? (
-            <p className="text-mafia-accent font-medium text-center text-lg">
+            <p className="text-mafia-accent font-semibold text-lg">
               ☠ {result.deathResult.username} was killed last night
             </p>
           ) : (
-            <p className="text-green-400 font-medium text-center">No one died last night</p>
+            <p className="text-green-400 font-semibold">✓ No one died last night</p>
           )}
         </div>
       </div>
 
-      {myRole === 'detective' && detectiveDayReveal && (
-        <p className="text-center text-xs text-blue-400/80">
-          Your private investigation: {detectiveDayReveal.detectiveTargetName} is{' '}
-          {detectiveDayReveal.detectiveResult === 'correct' ? 'Mafia' : 'not Mafia'}
-        </p>
-      )}
-
-      <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-        <h3 className="text-sm font-medium text-mafia-muted mb-3">Skip Discussion Vote</h3>
-        <p className="text-xs text-mafia-muted mb-3">
-          {skipDiscussionVotes.length} / {alivePlayers.length} players voted to skip discussion
-        </p>
-        {canVote && (
-          <button
+      {/* Skip to voting — prominent CTA */}
+      {canVote && (
+        <div className="space-y-2">
+          <motion.button
+            whileTap={{ scale: 0.98 }}
             onClick={handleSkipVote}
             disabled={allVoted}
-            className={`w-full py-2 px-4 rounded-lg font-medium transition-colors ${
+            className={`w-full py-4 rounded-xl font-semibold text-base transition-all ${
               hasVotedToSkip
-                ? 'bg-green-600 hover:bg-green-700 text-white'
-                : 'bg-mafia-primary hover:bg-mafia-primary/90 text-white'
+                ? 'bg-mafia-gold/20 dark:border-2 border-2 border-mafia-gold text-mafia-gold'
+                : 'bg-mafia-primary hover:bg-blue-600 text-white'
             } ${allVoted ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            {hasVotedToSkip ? 'Vote to Skip ✓' : 'Vote to Skip Discussion'}
-          </button>
-        )}
-        {allVoted && (
-          <p className="text-center text-green-400 text-sm mt-2">All players voted - skipping to voting!</p>
-        )}
-      </div>
+            {hasVotedToSkip ? '✓ Skip voted — click to undo' : '⏩ Vote to Skip Discussion'}
+          </motion.button>
+          <p className="text-center text-xs dark:text-mafia-muted text-gray-500">
+            {skipDiscussionVotes.length} / {alivePlayers.length} players voted to skip
+            {allVoted && <span className="ml-1 text-green-400 font-medium">— jumping to voting!</span>}
+          </p>
+        </div>
+      )}
 
-      <p className="text-center text-mafia-muted text-sm">Discuss before voting begins…</p>
+      {!canVote && (
+        <p className="text-center dark:text-mafia-muted text-gray-500 text-sm">
+          Discuss before voting begins…
+        </p>
+      )}
     </div>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between items-center text-sm">
-      <span className="text-mafia-muted">{label}</span>
-      <span className="capitalize">{value}</span>
+    <div className="flex justify-between items-center px-4 py-3 text-sm">
+      <span className="dark:text-mafia-muted text-gray-500">{label}</span>
+      <span className="capitalize dark:text-white text-gray-900">{value}</span>
     </div>
   );
 }
