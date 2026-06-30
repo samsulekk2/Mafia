@@ -67,7 +67,6 @@ function unregisterUserSocket(username: string | undefined, socketId: string): v
 }
 const joinRoomSchema = z.object({
   roomId: z.string().min(1).optional(),
-  asSpectator: z.boolean().optional(),
 });
 const roleConfigSchema = z.object({
   mafia: z.number().int().min(0),
@@ -97,6 +96,10 @@ function sendPrivateState(room: GameEngine, socketId: string, playerId: string) 
     const messages = room.getMafiaChatMessages();
     if (messages.length > 0) {
       io.to(socketId).emit('mafia_chat_update', messages);
+    }
+    const targetUsername = room.getCurrentMafiaTarget();
+    if (targetUsername) {
+      io.to(socketId).emit('mafia_target_update', { targetUsername });
     }
   }
   const full = room.dayResult;
@@ -388,7 +391,15 @@ io.on('connection', (socket) => {
       return;
     }
     const ok = room.submitMafiaAction(data.playerId, parsed.data.targetId);
-    if (ok) broadcastState(room);
+    if (ok) {
+      broadcastState(room);
+      const targetUsername = room.getCurrentMafiaTarget();
+      if (targetUsername) {
+        for (const p of room.getMafiaPlayers()) {
+          io.to(p.socketId).emit('mafia_target_update', { targetUsername });
+        }
+      }
+    }
     ack?.({ ok });
   });
 
@@ -473,6 +484,7 @@ io.on('connection', (socket) => {
       return;
     }
     const ok = room.submitVote(data.playerId, parsed.data.targetId);
+    if (ok) broadcastState(room);
     ack?.({ ok });
   });
 

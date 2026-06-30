@@ -340,6 +340,7 @@ export class GameEngine {
     if (this.phase !== 'VOTING') return false;
     const voter = this.players.get(voterId);
     if (!voter || voter.status !== 'alive' || voter.disconnected) return false;
+    if (voterId === targetId) return false; // cannot vote for yourself
     const target = this.players.get(targetId);
     if (!target || target.status !== 'alive') return false;
     this.votes.set(voterId, targetId);
@@ -550,6 +551,12 @@ export class GameEngine {
 
   getMafiaChatMessages(): MafiaChatMessage[] {
     return [...this.mafiaChatMessages];
+  }
+
+  getCurrentMafiaTarget(): string | null {
+    const targetId = this.nightActions.mafiaTarget;
+    if (!targetId) return null;
+    return this.players.get(targetId)?.username ?? null;
   }
 
   getRemainingSeconds(): number {
