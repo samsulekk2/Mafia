@@ -3,14 +3,13 @@ export interface SessionPayload {
   playerId: string;
   roomId: string;
   isAdmin: boolean;
-  isSpectator: boolean;
 }
 
 const SESSION_KEY = 'mafia_session';
 
 export function saveSession(session: SessionPayload): void {
   try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   } catch {
     /* storage unavailable */
   }
@@ -18,7 +17,7 @@ export function saveSession(session: SessionPayload): void {
 
 export function loadSession(): SessionPayload | null {
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
+    const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     return JSON.parse(raw) as SessionPayload;
   } catch {
@@ -28,7 +27,7 @@ export function loadSession(): SessionPayload | null {
 
 export function clearSession(): void {
   try {
-    sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_KEY);
   } catch {
     /* storage unavailable */
   }
