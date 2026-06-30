@@ -10,6 +10,7 @@ import type {
   TimerSync,
   VotingResult,
 } from '@shared/types';
+import { loadSession } from '../lib/session';
 
 interface GameStore {
   username: string | null;
@@ -17,6 +18,8 @@ interface GameStore {
   isAdmin: boolean;
   connected: boolean;
   reconnecting: boolean;
+  /** True on first load when a saved session is found, cleared once reconnect resolves. */
+  sessionRestoring: boolean;
   error: string | null;
 
   gameState: GameStatePublic | null;
@@ -29,12 +32,14 @@ interface GameStore {
   detectiveInvestigation: DetectiveInvestigationResult | null;
   detectiveDayReveal: Pick<DayResult, 'detectiveResult' | 'detectiveTargetName'> | null;
   mafiaChatMessages: MafiaChatMessage[];
+  mafiaCurrentTarget: string | null;
 
   setUsername: (username: string | null) => void;
   setPlayerId: (id: string | null) => void;
   setIsAdmin: (v: boolean) => void;
   setConnected: (v: boolean) => void;
   setReconnecting: (v: boolean) => void;
+  setSessionRestoring: (v: boolean) => void;
   setError: (error: string | null) => void;
   setGameState: (state: GameStatePublic | null) => void;
   setRoleAssignment: (payload: RoleAssignmentPayload) => void;
@@ -47,15 +52,24 @@ interface GameStore {
     result: Pick<DayResult, 'detectiveResult' | 'detectiveTargetName'> | null
   ) => void;
   setMafiaChatMessages: (messages: MafiaChatMessage[]) => void;
+  setMafiaCurrentTarget: (target: string | null) => void;
+  /** Clears all in-game results without touching auth fields. Call when a new session starts. */
+  clearGameResults: () => void;
   reset: () => void;
 }
 
-const initialState = {
+// Read the saved session synchronously at module load time so the very first
+// render already knows the user — no login-page flash on refresh.
+const _session = loadSession();
+
+// defaultState is used by reset() and always clears auth + game state.
+const defaultState = {
   username: null as string | null,
   playerId: null as string | null,
   isAdmin: false,
   connected: false,
   reconnecting: false,
+  sessionRestoring: false,
   error: null as string | null,
   gameState: null as GameStatePublic | null,
   myRole: null as Role | null,
@@ -67,6 +81,18 @@ const initialState = {
   detectiveInvestigation: null as DetectiveInvestigationResult | null,
   detectiveDayReveal: null as Pick<DayResult, 'detectiveResult' | 'detectiveTargetName'> | null,
   mafiaChatMessages: [] as MafiaChatMessage[],
+  mafiaCurrentTarget: null as string | null,
+};
+
+// initialState pre-populates auth fields from localStorage so the user
+// stays authenticated across page refreshes.
+const initialState = {
+  ...defaultState,
+  username: _session?.username ?? null,
+  playerId: _session?.playerId ?? null,
+  isAdmin: _session?.isAdmin ?? false,
+  // Show a restoring indicator until reconnect_session resolves.
+  sessionRestoring: !!_session,
 };
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -76,6 +102,7 @@ export const useGameStore = create<GameStore>((set) => ({
   setIsAdmin: (isAdmin) => set({ isAdmin }),
   setConnected: (connected) => set({ connected }),
   setReconnecting: (reconnecting) => set({ reconnecting }),
+  setSessionRestoring: (sessionRestoring) => set({ sessionRestoring }),
   setError: (error) => set({ error }),
   setGameState: (gameState) => set({ gameState }),
   setRoleAssignment: (payload) =>
@@ -90,5 +117,20 @@ export const useGameStore = create<GameStore>((set) => ({
   setDetectiveInvestigation: (detectiveInvestigation) => set({ detectiveInvestigation }),
   setDetectiveDayReveal: (detectiveDayReveal) => set({ detectiveDayReveal }),
   setMafiaChatMessages: (mafiaChatMessages) => set({ mafiaChatMessages }),
-  reset: () => set({ ...initialState }),
+  setMafiaCurrentTarget: (mafiaCurrentTarget) => set({ mafiaCurrentTarget }),
+  clearGameResults: () =>
+    set({
+      myRole: null,
+      mafiaPartners: [],
+      lastDayResult: null,
+      lastVotingResult: null,
+      gameWinner: null,
+      mafiaChatMessages: [],
+      mafiaCurrentTarget: null,
+      detectiveInvestigation: null,
+      detectiveDayReveal: null,
+      timer: null,
+    }),
+  // reset() uses defaultState (nulled auth) — called on logout or failed reconnect.
+  reset: () => set({ ...defaultState }),
 }));
