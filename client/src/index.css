@@ -3,7 +3,33 @@
 @tailwind utilities;
 
 @layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  html {
+    height: -webkit-fill-available;
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-mafia-bg text-white antialiased min-h-screen;
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    background-color: #0a0a0f;
+    color: white;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: none;
+  }
+
+  .light body {
+    background-color: #f4f4f8;
+    color: #111827;
+  }
+
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    opacity: 1;
   }
 }
