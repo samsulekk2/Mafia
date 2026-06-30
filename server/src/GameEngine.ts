@@ -46,10 +46,11 @@ export class GameEngine {
   winner: 'mafia' | 'civilians' | null = null;
   round = 0;
 
-  private nightActions: NightActions = {};
+  private nightActions: NightActions = { mafiaVotes: {} };
   private votes: Map<string, string> = new Map();
   private skipDiscussionVotes: Set<string> = new Set();
   private mafiaChatMessages: MafiaChatMessage[] = [];
+  private detectiveInvestigatedThisNight: Set<string> = new Set();
   private timerHandle: ReturnType<typeof setTimeout> | null = null;
   private onPhaseChange?: () => void;
 
@@ -173,10 +174,11 @@ export class GameEngine {
     if (!this.canAdminAct() || !this.canStartGame()) return false;
     this.assignRoles(); // sets phase = 'ROLE_ASSIGNMENT'
     this.round = 1;
-    this.nightActions = {};
+    this.nightActions = { mafiaVotes: {} };
     this.votes.clear();
     this.skipDiscussionVotes.clear();
     this.mafiaChatMessages = [];
+    this.detectiveInvestigatedThisNight.clear();
     this.dayResult = null;
     this.votingResult = null;
     this.winner = null;
@@ -200,7 +202,7 @@ export class GameEngine {
     this.clearTimer();
     this.phase = 'LOBBY';
     this.round = 0;
-    this.nightActions = {};
+    this.nightActions = { mafiaVotes: {} };
     this.votes.clear();
     this.skipDiscussionVotes.clear();
     this.dayResult = null;
@@ -244,7 +246,8 @@ export class GameEngine {
   beginNightAfterReveal(): void {
     if (this.phase !== 'ROLE_ASSIGNMENT') return;
     this.phase = 'NIGHT';
-    this.nightActions = {};
+    this.nightActions = { mafiaVotes: {} };
+    this.detectiveInvestigatedThisNight.clear();
     this.startTimer('night');
   }
 
@@ -256,7 +259,22 @@ export class GameEngine {
     if (!target || target.status !== 'alive') return false;
     // Prevent Mafia from targeting other Mafia members
     if (target.role === 'mafia') return false;
-    this.nightActions.mafiaTarget = targetId;
+    
+    // Track individual mafia vote
+    this.nightActions.mafiaVotes[playerId] = targetId;
+    
+    // Check for consensus
+    const mafiaPlayers = this.getAlivePlayers().filter(p => p.role === 'mafia');
+    const votes = Object.values(this.nightActions.mafiaVotes);
+    
+    // If all mafia have voted and they all agree, set the final target
+    if (votes.length === mafiaPlayers.length) {
+      const allSame = votes.every(v => v === votes[0]);
+      if (allSame) {
+        this.nightActions.mafiaTarget = votes[0];
+      }
+    }
+    
     return true;
   }
 
@@ -274,9 +292,12 @@ export class GameEngine {
     if (this.phase !== 'NIGHT') return false;
     const p = this.players.get(playerId);
     if (!p || p.role !== 'detective' || p.status !== 'alive' || p.disconnected) return false;
+    // Prevent detective from investigating twice in the same night
+    if (this.detectiveInvestigatedThisNight.has(playerId)) return false;
     const target = this.players.get(targetId);
     if (!target || target.status !== 'alive') return false;
     this.nightActions.detectiveTarget = targetId;
+    this.detectiveInvestigatedThisNight.add(playerId);
     return true;
   }
 
@@ -379,8 +400,15 @@ export class GameEngine {
     const top = entries.filter(([, c]) => c === maxVotes);
 
     if (top.length > 1) {
-      const pick = top[Math.floor(Math.random() * top.length)];
-      return this.eliminateFromVote(pick[0], voteCounts, true);
+      // Tie: no elimination, game continues to next round
+      const result: VotingResult = {
+        eliminatedPlayerId: null,
+        eliminatedUsername: null,
+        voteCounts,
+        tie: true,
+      };
+      this.votingResult = result;
+      return result;
     }
 
     return this.eliminateFromVote(top[0][0], voteCounts, false);
@@ -423,10 +451,11 @@ export class GameEngine {
     }
     this.round += 1;
     this.phase = 'NIGHT';
-    this.nightActions = {};
+    this.nightActions = { mafiaVotes: {} };
     this.votes.clear();
     this.dayResult = null;
     this.votingResult = null;
+    this.detectiveInvestigatedThisNight.clear();
     this.startTimer('night');
     return 'NIGHT';
   }
