@@ -51,6 +51,7 @@ export interface Player {
 
 export interface NightActions {
   mafiaTarget?: string;
+  mafiaVotes: Record<string, string>; // playerId -> targetId
   doctorTarget?: string;
   detectiveTarget?: string;
 }
